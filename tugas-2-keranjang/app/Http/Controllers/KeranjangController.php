@@ -1,0 +1,92 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Barang;
+use Illuminate\Http\Request;
+
+class KeranjangController extends Controller
+{
+    public function index()
+    {
+        $keranjang = session('keranjang', []);
+        $barang = Barang::whereIn('id', array_keys($keranjang))->get()->keyBy('id');
+
+        $items = [];
+        $total = 0;
+
+        foreach ($keranjang as $id => $jumlah) {
+            if (! isset($barang[$id])) {
+                continue;
+            }
+
+            $b = $barang[$id];
+            $subtotal = $b->harga * $jumlah;
+            $total += $subtotal;
+
+            $items[] = [
+                'barang'   => $b,
+                'jumlah'   => $jumlah,
+                'subtotal' => $subtotal,
+            ];
+        }
+
+        return view('keranjang', compact('items', 'total'));
+    }
+
+    public function tambah(Barang $barang)
+    {
+        $keranjang = session('keranjang', []);
+        $jumlah = ($keranjang[$barang->id] ?? 0) + 1;
+
+        if ($jumlah > $barang->stok) {
+            return back()->with('error', "Stok {$barang->nama} tidak cukup.");
+        }
+
+        $keranjang[$barang->id] = $jumlah;
+        session(['keranjang' => $keranjang]);
+
+        return back();
+    }
+
+    public function ubah(Request $request, Barang $barang)
+    {
+        $keranjang = session('keranjang', []);
+        $jumlah = $keranjang[$barang->id] ?? 0;
+
+        if ($request->input('aksi') === 'tambah') {
+            if ($jumlah + 1 > $barang->stok) {
+                return back()->with('error', "Stok {$barang->nama} tidak cukup.");
+            }
+            $jumlah++;
+        } elseif ($request->input('aksi') === 'kurang') {
+            $jumlah--;
+        }
+
+        if ($jumlah <= 0) {
+            unset($keranjang[$barang->id]);
+        } else {
+            $keranjang[$barang->id] = $jumlah;
+        }
+
+        session(['keranjang' => $keranjang]);
+
+        return back();
+    }
+
+    public function hapus(Barang $barang)
+    {
+        $keranjang = session('keranjang', []);
+        unset($keranjang[$barang->id]);
+        session(['keranjang' => $keranjang]);
+
+        return back();
+    }
+
+    public function kosongkan()
+    {
+        session()->forget('keranjang');
+
+        return back();
+    }
+}
